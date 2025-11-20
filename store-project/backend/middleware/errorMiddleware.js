@@ -1,0 +1,20 @@
+// backend/middleware/errorMiddleware.js
+// Middleware for handling 404 (Not Found) errors
+const notFound = (req, res, next) => {
+  const error = new Error(`Not Found - ${req.originalUrl}`)
+  res.status(404)
+  next(error)
+}
+
+// Middleware for handling general errors
+const errorHandler = (err, req, res, next) => {
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode // If status code is 200, make it 500 (server error)
+
+  res.status(statusCode)
+  res.json({
+    message: err.message,
+    stack: process.env.NODE_ENV === "production" ? null : err.stack, // Display stack only in development mode
+  })
+}
+
+export { notFound, errorHandler }

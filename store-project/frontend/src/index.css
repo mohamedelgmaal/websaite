@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans",
+    "Droid Sans", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+/* Custom styles for status badges */
+.status-badge {
+  display: inline-block;
+  padding: 0.25em 0.5em;
+  border-radius: 0.25rem;
+  font-size: 0.75em;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: white;
+}
+
+.status-badge.pending {
+  background-color: #ffc107; /* Yellow */
+}
+
+.status-badge.processing {
+  background-color: #007bff; /* Blue */
+}
+
+.status-badge.shipped {
+  background-color: #28a745; /* Green */
+}
+
+.status-badge.delivered {
+  background-color: #17a2b8; /* Teal */
+}
+
+.status-badge.cancelled {
+  background-color: #dc3545; /* Red */
+}
