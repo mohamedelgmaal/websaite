@@ -1,22 +1,53 @@
-import { Star, StarHalf, StarOff } from "lucide-react" // Import icons
+import { Star, StarHalf } from "lucide-react"
 
-const Rating = ({ value, text, color = "#f8e825" }) => {
+const Rating = ({ value = 0, text, color = "#B58A45" }) => {
+  const rating = Math.min(5, Math.max(0, Number(value) || 0))
+
   return (
-    <div className="flex items-center">
-      <span className="flex">
-        {[1, 2, 3, 4, 5].map((index) => (
-          <span key={index} className="mr-1">
-            {value >= index ? (
-              <Star size={18} fill={color} stroke={color} />
-            ) : value >= index - 0.5 ? (
-              <StarHalf size={18} fill={color} stroke={color} />
-            ) : (
-              <StarOff size={18} color={color} />
-            )}
-          </span>
-        ))}
+    <div
+      className="flex items-center gap-2"
+      role="img"
+      aria-label={`Rating: ${rating.toFixed(1)} out of 5`}
+    >
+      <span className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((index) => {
+          const isFull = rating >= index
+          const isHalf = !isFull && rating >= index - 0.5
+
+          return (
+            <span key={index}>
+              {isFull ? (
+                <Star
+                  size={17}
+                  fill={color}
+                  stroke={color}
+                  strokeWidth={1.5}
+                />
+              ) : isHalf ? (
+                <StarHalf
+                  size={17}
+                  fill={color}
+                  stroke={color}
+                  strokeWidth={1.5}
+                />
+              ) : (
+                <Star
+                  size={17}
+                  fill="none"
+                  stroke="#C8BBA7"
+                  strokeWidth={1.5}
+                />
+              )}
+            </span>
+          )
+        })}
       </span>
-      <span className="ml-2 text-gray-600 text-sm">{text && text}</span>
+
+      {text !== undefined && text !== null && text !== "" && (
+        <span className="text-sm text-[#766956]">
+          {text}
+        </span>
+      )}
     </div>
   )
 }

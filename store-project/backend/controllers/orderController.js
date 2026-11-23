@@ -1,121 +1,213 @@
-// backend/controllers/orderController.js
 import asyncHandler from "express-async-handler"
+import mongoose from "mongoose"
 import Order from "../models/Order.js"
-import User from "../models/User.js" // New: Import User model
+import User from "../models/User.js"
+import Product from "../models/Product.js"
 
-// @desc    Create new order
-// @route   POST /api/orders
-// @access  Private
+const roundMoney = (value) =>
+  Math.round((value + Number.EPSILON) * 100) / 100
+
+// Create new order
 const addOrderItems = asyncHandler(async (req, res) => {
-  const { orderItems, shippingAddress, paymentMethod, itemsPrice, taxPrice, shippingPrice, totalPrice } = req.body
+  const { orderItems, shippingAddress, paymentMethod } = req.body
 
-  if (orderItems && orderItems.length === 0) {
+  if (!Array.isArray(orderItems) || orderItems.length === 0) {
     res.status(400)
     throw new Error("No order items")
-  } else {
-    const order = new Order({
-      orderItems: orderItems.map((x) => ({
-        ...x,
-        product: x._id, // Link product to its _id
-        _id: undefined, // Remove temporary _id from order items
-      })),
-      user: req.user._id,
-      shippingAddress,
-      paymentMethod,
-      itemsPrice,
-      taxPrice,
-      shippingPrice,
-      totalPrice,
+  }
+
+  // PayPal is the only supported payment method
+  if (paymentMethod !== "PayPal") {
+    res.status(400)
+    throw new Error("Only PayPal payment is supported")
+  }
+
+  // Validate shipping address fields
+  const requiredAddressFields = [
+    "address",
+    "city",
+    "postalCode",
+    "country",
+  ]
+
+  if (
+    !shippingAddress ||
+    typeof shippingAddress !== "object" ||
+    requiredAddressFields.some(
+      (field) =>
+        typeof shippingAddress[field] !== "string" ||
+        !shippingAddress[field].trim()
+    )
+  ) {
+    res.status(400)
+    throw new Error("Valid shipping address is required")
+  }
+
+  const cleanShippingAddress = {
+    address: shippingAddress.address.trim(),
+    city: shippingAddress.city.trim(),
+    postalCode: shippingAddress.postalCode.trim(),
+    country: shippingAddress.country.trim(),
+  }
+
+  // Validate product IDs and quantities
+  const quantities = new Map()
+
+  for (const item of orderItems) {
+    if (
+      !item ||
+      !item._id ||
+      !mongoose.Types.ObjectId.isValid(item._id) ||
+      !Number.isInteger(Number(item.qty)) ||
+      Number(item.qty) <= 0
+    ) {
+      res.status(400)
+      throw new Error("Invalid product or quantity")
+    }
+
+    const productId = item._id.toString()
+    const currentQty = quantities.get(productId) || 0
+
+    quantities.set(productId, currentQty + Number(item.qty))
+  }
+
+  const productIds = [...quantities.keys()]
+
+  // Fetch trusted product data from MongoDB
+  const products = await Product.find({
+    _id: { $in: productIds },
+  })
+
+  if (products.length !== productIds.length) {
+    res.status(400)
+    throw new Error("One or more products were not found")
+  }
+
+  const orderItemsFromDB = []
+  let itemsPrice = 0
+
+  for (const product of products) {
+    const qty = quantities.get(product._id.toString())
+
+    if (qty > product.countInStock) {
+      res.status(400)
+      throw new Error(`Insufficient stock for ${product.name}`)
+    }
+
+    if (!Number.isFinite(product.price) || product.price < 0) {
+      res.status(400)
+      throw new Error(`Invalid price for ${product.name}`)
+    }
+
+    orderItemsFromDB.push({
+      name: product.name,
+      qty,
+      image: product.image,
+      price: product.price,
+      product: product._id,
     })
 
-    const createdOrder = await order.save()
-    res.status(201).json(createdOrder)
+    itemsPrice += product.price * qty
   }
+
+  itemsPrice = roundMoney(itemsPrice)
+
+  // Keep the existing store pricing rules
+  const shippingPrice = itemsPrice > 100 ? 0 : 10
+  const taxPrice = roundMoney(itemsPrice * 0.15)
+  const totalPrice = roundMoney(
+    itemsPrice + shippingPrice + taxPrice
+  )
+
+  const order = new Order({
+    user: req.user._id,
+    orderItems: orderItemsFromDB,
+    shippingAddress: cleanShippingAddress,
+    paymentMethod: "PayPal",
+    currency: "USD",
+    itemsPrice,
+    taxPrice,
+    shippingPrice,
+    totalPrice,
+  })
+
+  const createdOrder = await order.save()
+
+  res.status(201).json(createdOrder)
 })
 
-// @desc    Get order by ID
-// @route   GET /api/orders/:id
-// @access  Private
+// Get order by ID
 const getOrderById = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id).populate("user", "name email")
+  const order = await Order.findById(req.params.id).populate(
+    "user",
+    "name email"
+  )
 
-  if (order) {
-    // Ensure user is owner of order or admin
-    if (order.user._id.toString() === req.user._id.toString() || req.user.isAdmin) {
-      res.json(order)
-    } else {
-      res.status(401)
-      throw new Error("Not authorized to access this order")
-    }
-  } else {
+  if (!order) {
     res.status(404)
     throw new Error("Order not found")
   }
+
+  if (
+    !order.user ||
+    (
+      order.user._id.toString() !== req.user._id.toString() &&
+      !req.user.isAdmin
+    )
+  ) {
+    res.status(403)
+    throw new Error("Not authorized to access this order")
+  }
+
+  res.json(order)
 })
 
-// @desc    Update order to paid
-// @route   PUT /api/orders/:id/pay
-// @access  Private
+// Disable the old insecure client-side payment confirmation
 const updateOrderToPaid = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id)
-
-  if (order) {
-    order.isPaid = true
-    order.paidAt = Date.now()
-    // New: Save payment details from PayPal
-    order.paymentResult = {
-      id: req.body.id,
-      status: req.body.status,
-      update_time: req.body.update_time,
-      email_address: req.body.payer.email_address,
-    }
-
-    const updatedOrder = await order.save()
-    res.json(updatedOrder)
-  } else {
-    res.status(404)
-    throw new Error("Order not found")
-  }
+  res.status(410)
+  throw new Error(
+    "This payment endpoint is no longer supported. Use PayPal server-side capture."
+  )
 })
 
-// @desc    Update order to delivered
-// @route   PUT /api/orders/:id/deliver
-// @access  Private/Admin
+// Update order to delivered
 const updateOrderToDelivered = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id)
 
-  if (order) {
-    order.isDelivered = true
-    order.deliveredAt = Date.now()
-
-    const updatedOrder = await order.save()
-    res.json(updatedOrder)
-  } else {
+  if (!order) {
     res.status(404)
     throw new Error("Order not found")
   }
+
+  order.isDelivered = true
+  order.deliveredAt = Date.now()
+
+  const updatedOrder = await order.save()
+  res.json(updatedOrder)
 })
 
-// @desc    Get current user's orders
-// @route   GET /api/orders/myorders
-// @access  Private
+// Get logged-in user's orders
 const getMyOrders = asyncHandler(async (req, res) => {
   const orders = await Order.find({ user: req.user._id })
   res.json(orders)
 })
 
-// @desc    Get all orders
-// @route   GET /api/orders
-// @access  Private/Admin
+// Get all orders (admin)
 const getOrders = asyncHandler(async (req, res) => {
-  const { userEmail, isDelivered, startDate, endDate } = req.query // New: Add startDate and endDate
+  const { userEmail, isDelivered, startDate, endDate } = req.query
 
   const query = {}
-  const dateQuery = {} // New: Object for date range query
+  const dateQuery = {}
 
   if (userEmail) {
-    const users = await User.find({ email: { $regex: userEmail, $options: "i" } }).select("_id")
+    const escapedEmail = userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+    const users = await User.find({
+      email: { $regex: escapedEmail, $options: "i" },
+    }).select("_id")
+
     const userIds = users.map((user) => user._id)
+
     if (userIds.length > 0) {
       query.user = { $in: userIds }
     } else {
@@ -123,24 +215,50 @@ const getOrders = asyncHandler(async (req, res) => {
     }
   }
 
-  if (isDelivered !== undefined && (isDelivered === "true" || isDelivered === "false")) {
+  if (isDelivered === "true" || isDelivered === "false") {
     query.isDelivered = isDelivered === "true"
   }
 
-  // New: Add date range filtering
   if (startDate) {
-    dateQuery.$gte = new Date(startDate)
+    const parsedStartDate = new Date(startDate)
+
+    if (Number.isNaN(parsedStartDate.getTime())) {
+      res.status(400)
+      throw new Error("Invalid start date")
+    }
+
+    dateQuery.$gte = parsedStartDate
   }
+
   if (endDate) {
-    dateQuery.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999)) // End of the day
+    const parsedEndDate = new Date(endDate)
+
+    if (Number.isNaN(parsedEndDate.getTime())) {
+      res.status(400)
+      throw new Error("Invalid end date")
+    }
+
+    parsedEndDate.setHours(23, 59, 59, 999)
+    dateQuery.$lte = parsedEndDate
   }
 
   if (Object.keys(dateQuery).length > 0) {
     query.createdAt = dateQuery
   }
 
-  const orders = await Order.find(query).populate("user", "id name email")
+  const orders = await Order.find(query).populate(
+    "user",
+    "id name email"
+  )
+
   res.json(orders)
 })
 
-export { addOrderItems, getOrderById, updateOrderToPaid, updateOrderToDelivered, getMyOrders, getOrders }
+export {
+  addOrderItems,
+  getOrderById,
+  updateOrderToPaid,
+  updateOrderToDelivered,
+  getMyOrders,
+  getOrders,
+}

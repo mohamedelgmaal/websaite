@@ -1,359 +1,724 @@
-"use client"
-
-import { useState, useEffect, useContext } from "react"
+import { useState, useEffect, useContext, useCallback } from "react"
 import axios, { BASE_BACKEND_URL } from "../../api/axios"
 import { AuthContext } from "../../context/AuthContext"
-import { Trash2, Edit, PlusCircle } from "lucide-react"
+import {
+  Trash2,
+  Edit,
+  PlusCircle,
+  X,
+  Package,
+  Upload,
+  Image as ImageIcon,
+} from "lucide-react"
 import { useNotification } from "../../context/NotificationContext"
+
+const initialFormData = {
+  name: "",
+  nameAr: "",
+  price: "",
+  image: "",
+  brand: "",
+  category: "",
+  countInStock: "",
+  description: "",
+  descriptionAr: "",
+}
+
+const getImageUrl = (image) => {
+  if (!image) return "/placeholder.svg"
+
+  if (
+    image.startsWith("http://") ||
+    image.startsWith("https://") ||
+    image.startsWith("data:") ||
+    image.startsWith("blob:")
+  ) {
+    return image
+  }
+
+  if (image.startsWith("/uploads")) {
+    return `${BASE_BACKEND_URL}${image}`
+  }
+
+  return image
+}
 
 function ProductListAdmin() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+
+  const [showForm, setShowForm] = useState(false)
+  const [editingProduct, setEditingProduct] = useState(null)
+  const [formData, setFormData] = useState(initialFormData)
+
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
+
   const { userInfo } = useContext(AuthContext)
   const { addNotification } = useNotification()
 
-  // New: State for current page number in admin panel
-  const [page, setPage] = useState(1)
-  // New: State for total number of pages in admin panel
-  const [pages, setPages] = useState(1)
-
-  // State for Add/Edit Product Form
-  const [showForm, setShowForm] = useState(false)
-  const [editingProduct, setEditingProduct] = useState(null) // null for add, product object for edit
-  const [formData, setFormData] = useState({
-    name: "",
-    price: 0,
-    image: "",
-    brand: "",
-    category: "",
-    countInStock: 0,
-    description: "",
-  })
-  const [uploading, setUploading] = useState(false)
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
-      // New: Add pageNumber to fetch request
-      const { data } = await axios.get(`/api/products?pageNumber=${page}`)
-      setProducts(data.products) // Update products from received object
-      setPage(data.page) // Update page number
-      setPages(data.pages) // Update total number of pages
-      setLoading(false)
+      setError("")
+
+      const { data } = await axios.get(
+        `/api/products?pageNumber=${page}`
+      )
+
+      setProducts(Array.isArray(data.products) ? data.products : [])
+      setPages(Math.max(1, Number(data.pages) || 1))
     } catch (err) {
-      addNotification(err.response && err.response.data.message ? err.response.data.message : err.message, "error")
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to load products"
+
+      setError(message)
+      addNotification(message, "error")
+    } finally {
       setLoading(false)
     }
-  }
+  }, [page, addNotification])
 
   useEffect(() => {
     fetchProducts()
-  }, [page]) // Refetch when page number changes
+  }, [fetchProducts])
 
-  const deleteHandler = async (id) => {
-    if (window.confirm("Are you sure you want to delete this product?")) {
-      try {
-        const config = {
-          headers: {
-            Authorization: `Bearer ${userInfo.token}`,
-          },
-        }
-        await axios.delete(`/api/products/${id}`, config)
-        fetchProducts() // Refetch products after deletion
-        addNotification("Product deleted successfully!", "success")
-      } catch (err) {
-        addNotification(err.response && err.response.data.message ? err.response.data.message : err.message, "error")
-      }
-    }
+  const resetForm = () => {
+    setFormData(initialFormData)
+    setEditingProduct(null)
+    setShowForm(false)
+  }
+
+  const openAddForm = () => {
+    setEditingProduct(null)
+    setFormData(initialFormData)
+    setShowForm(true)
+  }
+
+  const openEditForm = (product) => {
+    setEditingProduct(product)
+
+    setFormData({
+      name: product.name || "",
+      nameAr: product.nameAr || "",
+      price: product.price ?? "",
+      image: product.image || "",
+      brand: product.brand || "",
+      category: product.category || "",
+      countInStock: product.countInStock ?? "",
+      description: product.description || "",
+      descriptionAr: product.descriptionAr || "",
+    })
+
+    setShowForm(true)
   }
 
   const handleFormChange = (e) => {
     const { name, value } = e.target
-    setFormData({ ...formData, [name]: value })
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
   }
 
   const uploadFileHandler = async (e) => {
-    const file = e.target.files[0]
-    const formData = new FormData()
-    formData.append("image", file)
+    const file = e.target.files?.[0]
+
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      addNotification("Please select a valid image file", "error")
+      e.target.value = ""
+      return
+    }
+
+    const uploadData = new FormData()
+    uploadData.append("image", file)
+
     setUploading(true)
 
     try {
       const config = {
         headers: {
-          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${userInfo.token}`,
         },
       }
-      const { data } = await axios.post("/api/upload", formData, config)
-      setFormData((prev) => ({ ...prev, image: data }))
-      setUploading(false)
+
+      const { data } = await axios.post(
+        "/api/upload",
+        uploadData,
+        config
+      )
+
+      const imagePath =
+        typeof data === "string" ? data : data?.image || data?.url
+
+      if (!imagePath) {
+        throw new Error("The server did not return an image path")
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        image: imagePath,
+      }))
+
       addNotification("Image uploaded successfully!", "success")
     } catch (err) {
-      console.error(err)
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        "Image upload failed"
+
+      addNotification(message, "error")
+    } finally {
       setUploading(false)
-      addNotification("Image upload failed", "error")
+      e.target.value = ""
     }
   }
 
   const handleFormSubmit = async (e) => {
     e.preventDefault()
 
+    if (saving || uploading) return
+
+    const price = Number(formData.price)
+    const countInStock = Number(formData.countInStock)
+
+    if (
+      !Number.isFinite(price) ||
+      price < 0 ||
+      !Number.isFinite(countInStock) ||
+      countInStock < 0
+    ) {
+      addNotification(
+        "Please enter a valid price and stock quantity",
+        "error"
+      )
+      return
+    }
+
+    const productData = {
+      ...formData,
+      name: formData.name.trim(),
+      nameAr: formData.nameAr.trim(),
+      brand: formData.brand.trim(),
+      category: formData.category.trim(),
+      description: formData.description.trim(),
+      descriptionAr: formData.descriptionAr.trim(),
+      price,
+      countInStock,
+    }
+
+    if (
+      !productData.name ||
+      !productData.brand ||
+      !productData.category ||
+      !productData.description
+    ) {
+      addNotification("Please complete all required English fields", "error")
+      return
+    }
+
+    setSaving(true)
+
     try {
       const config = {
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${userInfo.token}`,
         },
       }
 
       if (editingProduct) {
-        await axios.put(`/api/products/${editingProduct._id}`, formData, config)
+        await axios.put(
+          `/api/products/${editingProduct._id}`,
+          productData,
+          config
+        )
+
         addNotification("Product updated successfully!", "success")
       } else {
-        await axios.post("/api/products", formData, config)
+        await axios.post(
+          "/api/products",
+          productData,
+          config
+        )
+
         addNotification("Product added successfully!", "success")
+        setPage(1)
       }
-      setShowForm(false)
-      setEditingProduct(null)
-      setFormData({
-        name: "",
-        price: 0,
-        image: "",
-        brand: "",
-        category: "",
-        countInStock: 0,
-        description: "",
-      })
-      fetchProducts() // Refresh product list
+
+      resetForm()
+
+      if (page === 1 || editingProduct) {
+        await fetchProducts()
+      }
     } catch (err) {
-      addNotification(err.response && err.response.data.message ? err.response.data.message : err.message, "error")
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to save product"
+
+      addNotification(message, "error")
+    } finally {
+      setSaving(false)
     }
   }
 
-  const openAddForm = () => {
-    setEditingProduct(null)
-    setFormData({
-      name: "",
-      price: 0,
-      image: "",
-      brand: "",
-      category: "",
-      countInStock: 0,
-      description: "",
-    })
-    setShowForm(true)
-  }
+  const deleteHandler = async (id) => {
+    if (deletingId) return
 
-  const openEditForm = (product) => {
-    setEditingProduct(product)
-    setFormData({
-      name: product.name,
-      price: product.price,
-      image: product.image,
-      brand: product.brand,
-      category: product.category,
-      countInStock: product.countInStock,
-      description: product.description,
-    })
-    setShowForm(true)
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this product?"
+    )
+
+    if (!confirmed) return
+
+    setDeletingId(id)
+
+    try {
+      const config = {
+        headers: {
+          Authorization: `Bearer ${userInfo.token}`,
+        },
+      }
+
+      await axios.delete(`/api/products/${id}`, config)
+
+      addNotification("Product deleted successfully!", "success")
+
+      if (products.length === 1 && page > 1) {
+        setPage((prev) => prev - 1)
+      } else {
+        await fetchProducts()
+      }
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to delete product"
+
+      addNotification(message, "error")
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
-    <div>
-      <h2 className="text-3xl font-bold mb-6 text-center">Manage Products</h2>
-      <button
-        onClick={openAddForm}
-        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded flex items-center mb-4"
-      >
-        <PlusCircle className="w-5 h-5 mr-2" />
-        Add New Product
-      </button>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Package className="text-gray-700" size={23} />
+            <h2 className="text-2xl font-semibold text-gray-900">
+              Manage Products
+            </h2>
+          </div>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Add, edit, and manage your store products.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={openAddForm}
+          className="flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-700"
+        >
+          <PlusCircle size={18} />
+          Add New Product
+        </button>
+      </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-5">
+          <div className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl sm:p-8">
             <button
-              onClick={() => setShowForm(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl"
+              type="button"
+              onClick={resetForm}
+              disabled={saving || uploading}
+              className="absolute right-4 top-4 rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+              aria-label="Close form"
             >
-              &times;
+              <X size={21} />
             </button>
-            <h3 className="text-2xl font-bold mb-6 text-center">{editingProduct ? "Edit Product" : "Add Product"}</h3>
 
-            <form onSubmit={handleFormSubmit} className="space-y-4 pb-4">
+            <h3 className="mb-6 pr-10 text-2xl font-semibold text-gray-900">
+              {editingProduct ? "Edit Product" : "Add New Product"}
+            </h3>
+
+            <form onSubmit={handleFormSubmit} className="space-y-5">
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">Name</label>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Product Name (English)
+                </label>
                 <input
                   type="text"
                   name="name"
                   value={formData.name}
                   onChange={handleFormChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   required
+                  maxLength={120}
+                  dir="ltr"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-left outline-none transition focus:border-gray-900"
+                  placeholder="Enter product name"
                 />
               </div>
+
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">Price</label>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  اسم المنتج (بالعربية)
+                </label>
                 <input
-                  type="number"
-                  name="price"
-                  value={formData.price}
+                  type="text"
+                  name="nameAr"
+                  value={formData.nameAr}
                   onChange={handleFormChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
+                  maxLength={120}
+                  dir="rtl"
+                  lang="ar"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-right outline-none transition focus:border-gray-900"
+                  placeholder="اكتب اسم المنتج بالعربية"
                 />
               </div>
+
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    name="price"
+                    value={formData.price}
+                    onChange={handleFormChange}
+                    min="0"
+                    step="0.01"
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Stock Quantity
+                  </label>
+                  <input
+                    type="number"
+                    name="countInStock"
+                    value={formData.countInStock}
+                    onChange={handleFormChange}
+                    min="0"
+                    step="1"
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-gray-900"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">Image</label>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Product Image
+                </label>
+
                 <input
                   type="text"
                   name="image"
                   value={formData.image}
                   onChange={handleFormChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-2"
-                  placeholder="Or upload an image..."
+                  className="mb-3 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-gray-900"
+                  placeholder="Enter image path or upload an image"
                 />
-                <input
-                  type="file"
-                  id="image-file"
-                  onChange={uploadFileHandler}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
+
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-4 text-sm font-medium text-gray-600 transition hover:border-gray-900 hover:bg-gray-50">
+                  <Upload size={18} />
+                  {uploading ? "Uploading..." : "Choose Image to Upload"}
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={uploadFileHandler}
+                    disabled={uploading || saving}
+                    className="hidden"
+                  />
+                </label>
+
                 {uploading && (
-                  <div className="flex justify-center items-center mt-2">
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                  </div>
+                  <p className="mt-2 text-center text-sm text-gray-500">
+                    Please wait while your image is uploading...
+                  </p>
                 )}
-                {formData.image && (
-                  <div className="mt-4">
+
+                <div className="mt-4 flex justify-center">
+                  {formData.image ? (
                     <img
-                      src={
-                        formData.image.startsWith("/uploads") ? `${BASE_BACKEND_URL}${formData.image}` : formData.image
-                      }
-                      alt="Image Preview"
-                      className="w-32 h-32 object-cover rounded-md mx-auto"
+                      src={getImageUrl(formData.image)}
+                      alt="Product preview"
+                      onError={(e) => {
+                        e.currentTarget.src = "/placeholder.svg"
+                      }}
+                      className="h-36 w-36 rounded-lg border border-gray-200 object-cover"
                     />
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex h-36 w-36 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 text-gray-400">
+                      <ImageIcon size={30} />
+                      <span className="text-xs">Image Preview</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">Brand</label>
-                <input
-                  type="text"
-                  name="brand"
-                  value={formData.brand}
-                  onChange={handleFormChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
+
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Brand
+                  </label>
+                  <input
+                    type="text"
+                    name="brand"
+                    value={formData.brand}
+                    onChange={handleFormChange}
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-gray-900"
+                    placeholder="Enter brand"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    name="category"
+                    value={formData.category}
+                    onChange={handleFormChange}
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-gray-900"
+                    placeholder="e.g. Men, Women, Kids"
+                  />
+                </div>
               </div>
+
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">Category</label>
-                <input
-                  type="text"
-                  name="category"
-                  value={formData.category}
-                  onChange={handleFormChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">Count In Stock</label>
-                <input
-                  type="number"
-                  name="countInStock"
-                  value={formData.countInStock}
-                  onChange={handleFormChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Description (English)
+                </label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleFormChange}
-                  rows="3"
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  rows={4}
                   required
-                ></textarea>
+                  dir="ltr"
+                  className="w-full resize-y rounded-lg border border-gray-300 px-4 py-3 text-left outline-none focus:border-gray-900"
+                  placeholder="Describe the product..."
+                />
               </div>
-              <button
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
-                disabled={uploading}
-              >
-                {editingProduct ? "Update Product" : "Add Product"}
-              </button>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  وصف المنتج (بالعربية)
+                </label>
+                <textarea
+                  name="descriptionAr"
+                  value={formData.descriptionAr}
+                  onChange={handleFormChange}
+                  rows={4}
+                  dir="rtl"
+                  lang="ar"
+                  className="w-full resize-y rounded-lg border border-gray-300 px-4 py-3 text-right outline-none focus:border-gray-900"
+                  placeholder="اكتب وصف المنتج بالعربية..."
+                />
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={saving || uploading}
+                  className="flex-1 rounded-lg border border-gray-300 px-5 py-3 font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving || uploading}
+                  className="flex-1 rounded-lg bg-gray-900 px-5 py-3 font-semibold text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving
+                    ? "Saving..."
+                    : uploading
+                      ? "Uploading image..."
+                      : editingProduct
+                        ? "Update Product"
+                        : "Add Product"}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+        <div className="flex min-h-64 items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900" />
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-sm text-red-700">{error}</p>
+          <button
+            type="button"
+            onClick={fetchProducts}
+            className="mt-4 rounded-lg bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+          >
+            Try Again
+          </button>
+        </div>
+      ) : products.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-5 py-16 text-center">
+          <Package className="mx-auto mb-3 text-gray-400" size={38} />
+          <h3 className="font-semibold text-gray-800">
+            No products found
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Add your first product to get started.
+          </p>
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
-              <thead>
-                <tr className="bg-gray-100 text-gray-600 uppercase text-sm leading-normal">
-                  <th className="py-3 px-6 text-left">ID</th>
-                  <th className="py-3 px-6 text-left">Name</th>
-                  <th className="py-3 px-6 text-left">Price</th>
-                  <th className="py-3 px-6 text-left">Stock</th>
-                  <th className="py-3 px-6 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="text-gray-600 text-sm font-light">
-                {products.map((product) => (
-                  <tr key={product._id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="py-3 px-6 text-left whitespace-nowrap">{product._id}</td>
-                    <td className="py-3 px-6 text-left">{product.name}</td>
-                    <td className="py-3 px-6 text-left">${product.price.toFixed(2)}</td>
-                    <td className="py-3 px-6 text-left">{product.countInStock}</td>
-                    <td className="py-3 px-6 text-center">
-                      <div className="flex item-center justify-center">
-                        <button
-                          onClick={() => openEditForm(product)}
-                          className="w-8 h-8 mr-2 transform hover:text-blue-500 hover:scale-110"
-                          title="Edit"
-                        >
-                          <Edit className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => deleteHandler(product._id)}
-                          className="w-8 h-8 transform hover:text-red-500 hover:scale-110"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </td>
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[650px] text-left">
+                <thead className="bg-gray-50">
+                  <tr className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-5 py-4">Product</th>
+                    <th className="px-5 py-4">Price</th>
+                    <th className="px-5 py-4">Stock</th>
+                    <th className="px-5 py-4 text-center">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {products.map((product) => (
+                    <tr
+                      key={product._id}
+                      className="transition hover:bg-gray-50"
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getImageUrl(product.image)}
+                            alt={product.name}
+                            onError={(e) => {
+                              e.currentTarget.src = "/placeholder.svg"
+                            }}
+                            className="h-12 w-12 rounded-lg border border-gray-200 object-cover"
+                          />
+
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {product.name}
+                            </p>
+                            {product.nameAr && (
+                              <p
+                                className="mt-1 text-sm text-gray-600"
+                                dir="rtl"
+                              >
+                                {product.nameAr}
+                              </p>
+                            )}
+                            <p className="mt-1 text-xs text-gray-500">
+                              {product.category}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4 font-medium text-gray-800">
+                        ${Number(product.price || 0).toFixed(2)}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                          {product.countInStock}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditForm(product)}
+                            title="Edit product"
+                            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+                          >
+                            <Edit size={18} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => deleteHandler(product._id)}
+                            disabled={deletingId === product._id}
+                            title="Delete product"
+                            className="rounded-lg p-2 text-gray-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Pagination Controls for Admin Product List */}
           {pages > 1 && (
-            <div className="flex justify-center mt-8 space-x-2">
-              {[...Array(pages).keys()].map((x) => (
-                <button
-                  key={x + 1}
-                  onClick={() => setPage(x + 1)}
-                  className={`px-4 py-2 rounded-md font-semibold ${
-                    x + 1 === page ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-                  }`}
-                >
-                  {x + 1}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page === 1}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+
+              {Array.from({ length: pages }, (_, index) => index + 1).map(
+                (pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setPage(pageNumber)}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      pageNumber === page
+                        ? "bg-gray-900 text-white"
+                        : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                )
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPage((prev) => Math.min(pages, prev + 1))
+                }
+                disabled={page === pages}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
             </div>
           )}
         </>

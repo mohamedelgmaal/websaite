@@ -1,11 +1,10 @@
-"use client"
-
 import { useState, useEffect, useContext } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
-import axios, { BASE_BACKEND_URL } from "../api/axios" // New: Import BASE_BACKEND_URL
+import axios, { BASE_BACKEND_URL } from "../api/axios"
 import { CartContext } from "../context/CartContext"
 import { AuthContext } from "../context/AuthContext"
-import { Star } from "lucide-react"
+import { LanguageContext } from "../context/LanguageContext"
+import { Star, ShoppingBag, ArrowLeft, PackageCheck } from "lucide-react"
 import { useNotification } from "../context/NotificationContext"
 
 function ProductDetailsPage() {
@@ -13,42 +12,108 @@ function ProductDetailsPage() {
   const navigate = useNavigate()
   const { addToCart } = useContext(CartContext)
   const { userInfo } = useContext(AuthContext)
+  const { language } = useContext(LanguageContext)
   const { addNotification } = useNotification()
+
+  const isArabic = language === "ar"
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [qty, setQty] = useState(1)
-  const [rating, setRating] = useState(0)
+  const [rating, setRating] = useState("")
   const [comment, setComment] = useState("")
-  const [reviewError, setReviewError] = useState("")
-  const [reviewSuccess, setReviewSuccess] = useState("")
   const [reviewLoading, setReviewLoading] = useState(false)
+
+  const text = {
+    notFound: isArabic ? "المنتج غير موجود" : "Product Not Found",
+    unavailable: isArabic
+      ? "هذا المنتج غير متاح حاليًا."
+      : "This product is currently unavailable.",
+    back: isArabic ? "العودة إلى المنتجات" : "Back to Collection",
+    selected: isArabic ? "من مجموعتنا المختارة" : "Selected Collection",
+    reviews: isArabic ? "تقييم" : "reviews",
+    stock: isArabic ? "متوفر في المخزون" : "In Stock",
+    available: isArabic ? "قطعة متاحة" : "available",
+    outOfStock: isArabic ? "نفدت الكمية" : "Currently Out of Stock",
+    quantity: isArabic ? "الكمية" : "Quantity",
+    addToCart: isArabic ? "أضف إلى السلة" : "Add To Cart",
+    customerFeedback: isArabic ? "آراء العملاء" : "Customer Feedback",
+    reviewsTitle: isArabic ? "التقييمات" : "Reviews",
+    noReviews: isArabic
+      ? "لا توجد تقييمات لهذا المنتج حتى الآن. كن أول من يشارك تجربته."
+      : "No reviews for this product yet. Be the first to share your experience.",
+    shareExperience: isArabic ? "شارك تجربتك" : "Share Your Experience",
+    yourRating: isArabic ? "تقييمك" : "Your Rating",
+    selectRating: isArabic ? "اختر تقييمك" : "Select your rating",
+    poor: isArabic ? "ضعيف" : "Poor",
+    fair: isArabic ? "مقبول" : "Fair",
+    good: isArabic ? "جيد" : "Good",
+    veryGood: isArabic ? "جيد جدًا" : "Very Good",
+    excellent: isArabic ? "ممتاز" : "Excellent",
+    yourReview: isArabic ? "مراجعتك" : "Your Review",
+    reviewPlaceholder: isArabic
+      ? "اكتب مراجعتك هنا..."
+      : "Write your review here...",
+    submitting: isArabic ? "جارٍ الإرسال..." : "Submitting...",
+    submitReview: isArabic ? "إرسال التقييم" : "Submit Review",
+    loginMessage: isArabic
+      ? "يرجى تسجيل الدخول لإضافة تقييم."
+      : "Please log in to add a review.",
+    login: isArabic ? "تسجيل الدخول" : "log in",
+    addRatingError: isArabic
+      ? "يرجى اختيار تقييم وكتابة تعليق."
+      : "Please select a rating and enter a comment.",
+    reviewSuccess: isArabic
+      ? "تمت إضافة التقييم بنجاح!"
+      : "Review added successfully!",
+    loadError: isArabic
+      ? "تعذر تحميل المنتج."
+      : "Unable to load product.",
+    stockOutButton: isArabic ? "غير متوفر" : "Out Of Stock",
+  }
 
   const fetchProduct = async () => {
     try {
+      setLoading(true)
+      setError("")
+
       const { data } = await axios.get(`/api/products/${id}`)
       setProduct(data)
-      setLoading(false)
     } catch (err) {
-      addNotification(err.response && err.response.data.message ? err.response.data.message : err.message, "error")
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        text.loadError
+
+      setError(message)
+      addNotification(message, "error")
+    } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
+    setQty(1)
     fetchProduct()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const addToCartHandler = () => {
+    if (!product || product.countInStock <= 0) return
+
     addToCart(product, Number(qty))
     navigate("/cart")
   }
 
   const submitReviewHandler = async (e) => {
     e.preventDefault()
-    setReviewError("")
-    setReviewSuccess("")
+
+    if (!rating || !comment.trim()) {
+      addNotification(text.addRatingError, "error")
+      return
+    }
+
     setReviewLoading(true)
 
     try {
@@ -58,204 +123,346 @@ function ProductDetailsPage() {
           Authorization: `Bearer ${userInfo.token}`,
         },
       }
-      await axios.post(`/api/products/${id}/reviews`, { rating, comment }, config)
-      addNotification("Review added successfully!", "success")
-      setRating(0)
+
+      await axios.post(
+        `/api/products/${id}/reviews`,
+        {
+          rating: Number(rating),
+          comment: comment.trim(),
+        },
+        config
+      )
+
+      addNotification(text.reviewSuccess, "success")
+      setRating("")
       setComment("")
-      setReviewLoading(false)
-      fetchProduct()
+      await fetchProduct()
     } catch (err) {
+      addNotification(
+        err.response?.data?.message || err.message,
+        "error"
+      )
+    } finally {
       setReviewLoading(false)
-      addNotification(err.response && err.response.data.message ? err.response.data.message : err.message, "error")
     }
   }
 
-  // New: Construct full image path
   const imageUrl = product?.image?.startsWith("/uploads")
     ? `${BASE_BACKEND_URL}${product.image}`
     : product?.image || "/placeholder.svg"
 
+  const handleImageError = (e) => {
+    e.currentTarget.onerror = null
+    e.currentTarget.src = "/placeholder.svg"
+  }
+
+  if (loading) {
+    return (
+      <main className="flex min-h-[60vh] items-center justify-center bg-[#f7f6f2]">
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-[#e5e2da] border-t-[#a58a5c]" />
+      </main>
+    )
+  }
+
+  if (error || !product) {
+    return (
+      <main
+        dir={isArabic ? "rtl" : "ltr"}
+        className="min-h-screen bg-[#f7f6f2] px-4 py-16"
+      >
+        <div className="mx-auto max-w-2xl border border-[#e5e2da] bg-white px-6 py-16 text-center">
+          <h1 className="font-serif text-2xl text-[#292823]">
+            {text.notFound}
+          </h1>
+
+          <p className="mt-3 text-sm text-[#77746d]">
+            {error || text.unavailable}
+          </p>
+
+          <Link
+            to="/products"
+            className="mt-6 inline-flex items-center gap-2 bg-[#292823] px-6 py-3 text-xs font-semibold text-white transition hover:bg-[#a58a5c]"
+          >
+            <ArrowLeft size={15} />
+            {text.back}
+          </Link>
+        </div>
+      </main>
+    )
+  }
+
+  const reviews = product.reviews || []
+  const stock = Number(product.countInStock || 0)
+  const averageRating = Number(product.rating || 0)
+
+  const productName =
+    isArabic && product.nameAr?.trim()
+      ? product.nameAr
+      : product.name
+
+  const productDescription =
+    isArabic && product.descriptionAr?.trim()
+      ? product.descriptionAr
+      : product.description || (
+          isArabic
+            ? "اكتشف هذه القطعة من مجموعتنا."
+            : "Discover this piece from our collection."
+        )
+
   return (
-    <div className="py-8">
-      <Link to="/products" className="text-blue-600 hover:underline mb-4 inline-block">
-        Go Back to Products
-      </Link>
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      ) : error ? (
-        <div
-          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-center"
-          role="alert"
+    <main
+      dir={isArabic ? "rtl" : "ltr"}
+      className="min-h-screen bg-[#f7f6f2] px-4 py-8 sm:px-6 lg:px-10"
+    >
+      <div className="mx-auto max-w-[1280px]">
+        <Link
+          to="/products"
+          className="mb-8 inline-flex items-center gap-2 text-xs font-medium text-[#77746d] transition hover:text-[#a58a5c]"
         >
-          {error}
-        </div>
-      ) : product ? (
-        <>
-          <div className="flex flex-col md:flex-row gap-8 bg-white p-6 rounded-lg shadow-md mb-8">
-            <div className="md:w-1/2">
-              <img
-                src={imageUrl || "/placeholder.svg"} // Use new imageUrl
-                alt={product.name}
-                className="w-full h-auto object-cover rounded-lg"
-              />
-            </div>
-            <div className="md:w-1/2">
-              <h1 className="text-4xl font-bold mb-4">{product.name}</h1>
-              <p className="text-gray-700 text-lg mb-4">{product.description}</p>
-              <p className="text-2xl font-semibold text-blue-600 mb-4">${product.price.toFixed(2)}</p>
-              <div className="mb-4 flex items-center">
-                <span className="font-semibold mr-2">Rating:</span>
-                <div className="flex">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-5 h-5 ${i < product.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
-                    />
-                  ))}
-                </div>
-                <span className="ml-2 text-gray-600">({product.numReviews} Reviews)</span>
-              </div>
-              <div className="mb-4">
-                <span className="font-semibold">Status: </span>
-                {product.countInStock > 0 ? (
-                  <span className="text-green-600">In Stock ({product.countInStock})</span>
-                ) : (
-                  <span className="text-red-600">Out Of Stock</span>
-                )}
-              </div>
+          <ArrowLeft size={15} />
+          {text.back}
+        </Link>
 
-              {product.countInStock > 0 && (
-                <div className="mb-4 flex items-center">
-                  <label htmlFor="qty" className="mr-2 font-semibold">
-                    Quantity:
-                  </label>
-                  <select
-                    id="qty"
-                    value={qty}
-                    onChange={(e) => setQty(e.target.value)}
-                    className="border border-gray-300 rounded-md p-2"
-                  >
-                    {[...Array(product.countInStock).keys()].map((x) => (
-                      <option key={x + 1} value={x + 1}>
-                        {x + 1}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <button
-                onClick={addToCartHandler}
-                className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 ${product.countInStock === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={product.countInStock === 0}
-              >
-                Add To Cart
-              </button>
-            </div>
+        <section className="grid grid-cols-1 gap-8 bg-white p-5 shadow-sm sm:p-8 lg:grid-cols-2 lg:gap-12">
+          <div className="flex min-h-[350px] items-center justify-center bg-[#f7f6f2] p-4 sm:min-h-[500px]">
+            <img
+              src={imageUrl}
+              alt={productName}
+              onError={handleImageError}
+              className="max-h-[600px] w-full object-contain"
+            />
           </div>
 
-          {/* Reviews Section */}
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-3xl font-bold mb-6">Reviews</h2>
-            {product.reviews.length === 0 && <p className="text-gray-600 mb-4">No reviews for this product yet.</p>}
-            <div>
-              {product.reviews.map((review) => (
-                <div key={review._id} className="border-b border-gray-200 pb-4 mb-4 last:border-b-0">
-                  <div className="flex items-center mb-2">
-                    <strong className="mr-2">{review.name}</strong>
-                    <div className="flex">
+          <div className="flex flex-col justify-center py-3 lg:py-8">
+            <span className="mb-4 text-[10px] font-semibold uppercase tracking-[3px] text-[#a58a5c]">
+              {product.brand || product.category || text.selected}
+            </span>
+
+            <h1 className="font-serif text-3xl font-medium leading-tight text-[#292823] sm:text-4xl">
+              {productName}
+            </h1>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    size={16}
+                    className={
+                      i < Math.round(averageRating)
+                        ? "fill-[#b39762] text-[#b39762]"
+                        : "text-[#dedbd3]"
+                    }
+                  />
+                ))}
+              </div>
+
+              <span className="text-xs text-[#77746d]">
+                {averageRating.toFixed(1)} ({product.numReviews || 0} {text.reviews})
+              </span>
+            </div>
+
+            <div className="my-6 border-y border-[#eae7df] py-5">
+              <span className="font-serif text-3xl text-[#292823]">
+                ${Number(product.price || 0).toFixed(2)}
+              </span>
+            </div>
+
+            <p className="whitespace-pre-line text-sm leading-8 text-[#77746d]">
+              {productDescription}
+            </p>
+
+            <div className="mt-7 flex items-center gap-3">
+              <PackageCheck size={18} className="text-[#a58a5c]" />
+
+              {stock > 0 ? (
+                <span className="text-xs font-medium text-[#58765b]">
+                  {text.stock} ({stock} {text.available})
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-red-600">
+                  {text.outOfStock}
+                </span>
+              )}
+            </div>
+
+            {stock > 0 && (
+              <div className="mt-7">
+                <label
+                  htmlFor="qty"
+                  className="mb-3 block text-xs font-semibold text-[#55534d]"
+                >
+                  {text.quantity}
+                </label>
+
+                <select
+                  id="qty"
+                  value={qty}
+                  onChange={(e) => setQty(Number(e.target.value))}
+                  className="w-28 border border-[#e5e2da] bg-[#faf9f6] px-4 py-3 text-sm text-[#292823] outline-none focus:border-[#a58a5c]"
+                >
+                  {Array.from(
+                    { length: stock },
+                    (_, index) => index + 1
+                  ).map((number) => (
+                    <option key={number} value={number}>
+                      {number}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={addToCartHandler}
+              disabled={stock === 0}
+              className="mt-7 flex w-full items-center justify-center gap-3 bg-[#292823] px-7 py-4 text-xs font-semibold uppercase tracking-[2px] text-white transition hover:bg-[#a58a5c] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ShoppingBag size={17} />
+              {stock > 0 ? text.addToCart : text.stockOutButton}
+            </button>
+          </div>
+        </section>
+
+        <section className="mt-10 bg-white p-5 shadow-sm sm:p-8">
+          <div className="mb-8 border-b border-[#eae7df] pb-5">
+            <span className="text-[10px] font-semibold uppercase tracking-[3px] text-[#a58a5c]">
+              {text.customerFeedback}
+            </span>
+
+            <h2 className="mt-2 font-serif text-3xl text-[#292823]">
+              {text.reviewsTitle}
+            </h2>
+          </div>
+
+          {reviews.length === 0 ? (
+            <p className="py-5 text-sm text-[#77746d]">
+              {text.noReviews}
+            </p>
+          ) : (
+            <div className="space-y-6">
+              {reviews.map((review) => (
+                <article
+                  key={review._id}
+                  className="border-b border-[#eae7df] pb-6 last:border-0"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <strong className="text-sm font-semibold text-[#292823]">
+                      {review.name}
+                    </strong>
+
+                    <div className="flex gap-1">
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
-                          className={`w-4 h-4 ${i < review.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
+                          size={14}
+                          className={
+                            i < review.rating
+                              ? "fill-[#b39762] text-[#b39762]"
+                              : "text-[#dedbd3]"
+                          }
                         />
                       ))}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500 mb-2">
-                    {new Date(review.createdAt).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
+
+                  <p className="mt-2 text-[11px] text-[#99958b]">
+                    {new Date(review.createdAt).toLocaleDateString(
+                      isArabic ? "ar-EG" : "en-US",
+                      {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      }
+                    )}
                   </p>
-                  <p className="text-gray-700">{review.comment}</p>
-                </div>
+
+                  <p className="mt-3 text-sm leading-7 text-[#77746d]">
+                    {review.comment}
+                  </p>
+                </article>
               ))}
             </div>
+          )}
 
-            <h3 className="text-2xl font-bold mt-8 mb-4">Add a Review</h3>
-            {reviewLoading && (
-              <div className="flex justify-center items-center h-16">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            )}
+          <div className="mt-10 border-t border-[#eae7df] pt-8">
+            <h3 className="font-serif text-2xl text-[#292823]">
+              {text.shareExperience}
+            </h3>
 
-            {reviewError && (
-              <div
-                className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
-                role="alert"
-              >
-                {reviewError}
-              </div>
-            )}
             {userInfo ? (
-              <form onSubmit={submitReviewHandler} className="space-y-4">
+              <form
+                onSubmit={submitReviewHandler}
+                className="mt-6 max-w-2xl space-y-5"
+              >
                 <div>
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="rating">
-                    Rating
+                  <label
+                    htmlFor="rating"
+                    className="mb-2 block text-xs font-semibold text-[#55534d]"
+                  >
+                    {text.yourRating}
                   </label>
+
                   <select
                     id="rating"
                     value={rating}
-                    onChange={(e) => setRating(Number(e.target.value))}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    onChange={(e) => setRating(e.target.value)}
+                    className="w-full border border-[#e5e2da] bg-[#faf9f6] px-4 py-3 text-sm text-[#55534d] outline-none focus:border-[#a58a5c]"
                     required
                   >
-                    <option value="">Select...</option>
-                    <option value="1">1 - Poor</option>
-                    <option value="2">2 - Fair</option>
-                    <option value="3">3 - Good</option>
-                    <option value="4">4 - Very Good</option>
-                    <option value="5">5 - Excellent</option>
+                    <option value="">{text.selectRating}</option>
+                    <option value="1">1 - {text.poor}</option>
+                    <option value="2">2 - {text.fair}</option>
+                    <option value="3">3 - {text.good}</option>
+                    <option value="4">4 - {text.veryGood}</option>
+                    <option value="5">5 - {text.excellent}</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="comment">
-                    Comment
+                  <label
+                    htmlFor="comment"
+                    className="mb-2 block text-xs font-semibold text-[#55534d]"
+                  >
+                    {text.yourReview}
                   </label>
+
                   <textarea
                     id="comment"
-                    rows="3"
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    rows="4"
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
+                    placeholder={text.reviewPlaceholder}
+                    dir={isArabic ? "rtl" : "ltr"}
+                    className="w-full resize-y border border-[#e5e2da] bg-[#faf9f6] px-4 py-3 text-sm text-[#55534d] outline-none placeholder:text-[#aaa69b] focus:border-[#a58a5c]"
                     required
-                  ></textarea>
+                  />
                 </div>
+
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
                   disabled={reviewLoading}
+                  className="bg-[#292823] px-8 py-4 text-xs font-semibold uppercase tracking-[2px] text-white transition hover:bg-[#a58a5c] disabled:opacity-50"
                 >
-                  {reviewLoading ? "Submitting..." : "Submit Review"}
+                  {reviewLoading ? text.submitting : text.submitReview}
                 </button>
               </form>
             ) : (
-              <p className="text-gray-600">
-                Please{" "}
-                <Link to="/login" className="text-blue-600 hover:underline">
-                  log in
-                </Link>{" "}
-                to add a review.
+              <p className="mt-4 text-sm text-[#77746d]">
+                {text.loginMessage}{" "}
+                <Link
+                  to="/login"
+                  className="font-semibold text-[#a58a5c] underline"
+                >
+                  {text.login}
+                </Link>
               </p>
             )}
           </div>
-        </>
-      ) : null}
-    </div>
+        </section>
+      </div>
+    </main>
   )
 }
 

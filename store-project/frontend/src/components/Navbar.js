@@ -1,84 +1,266 @@
-"use client"
+import { useContext, useState, useEffect } from "react"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 
-import { useContext } from "react"
-import { Link, useNavigate } from "react-router-dom"
 import { AuthContext } from "../context/AuthContext"
-import { CartContext } from "../context/CartContext" // New: Import CartContext
-import { ShoppingCart, User, ListOrdered } from "lucide-react" // New: ListOrdered icon
+import { CartContext } from "../context/CartContext"
+import { LanguageContext } from "../context/LanguageContext"
+
+import {
+  ShoppingBag,
+  UserRound,
+  Menu,
+  X,
+  Globe2,
+  ClipboardList,
+  LogOut,
+  ChevronDown,
+  ShieldCheck,
+} from "lucide-react"
 
 function Navbar() {
   const { userInfo, logout } = useContext(AuthContext)
-  const { cartItems } = useContext(CartContext) // New: Get cart items
+  const { cartItems } = useContext(CartContext)
+  const { language, toggleLanguage } = useContext(LanguageContext)
+
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const ar = language === "ar"
+
+  const count = (cartItems || []).reduce(
+    (total, item) => total + (Number(item.qty) || 0),
+    0
+  )
+
+  useEffect(() => {
+    setMenuOpen(false)
+    setAccountOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false)
+        setAccountOpen(false)
+      }
+    }
+
+    document.addEventListener("keydown", handleEscape)
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape)
+    }
+  }, [])
+
+  const closeMenus = () => {
+    setMenuOpen(false)
+    setAccountOpen(false)
+  }
 
   const logoutHandler = () => {
+    closeMenus()
     logout()
-    navigate("/login")
+    navigate("/login", { replace: true })
+  }
+
+  const navLinks = [
+    {
+      name: ar ? "الرئيسية" : "Home",
+      path: "/",
+    },
+    {
+      name: ar ? "تسوق الآن" : "Shop",
+      path: "/products",
+    },
+  ]
+
+  if (userInfo) {
+    navLinks.push({
+      name: ar ? "طلباتي" : "My Orders",
+      path: "/myorders",
+    })
   }
 
   return (
-    <header className="bg-gray-800 text-white p-4 shadow-md">
-      <div className="container mx-auto flex justify-between items-center">
-        <Link to="/" className="text-2xl font-bold">
-          E-commerce Store
-        </Link>
-        <nav>
-          <ul className="flex space-x-4">
-            <li>
-              <Link to="/cart" className="flex items-center hover:text-gray-300 relative">
-                <ShoppingCart className="h-5 w-5 mr-1" />
-                Cart
-                {cartItems.length > 0 && ( // New: Display number of items in cart
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {cartItems.reduce((acc, item) => acc + item.qty, 0)}
-                  </span>
-                )}
-              </Link>
-            </li>
-            {userInfo ? (
-              <li className="relative group">
-                <span className="flex items-center cursor-pointer hover:text-gray-300">
-                  <User className="h-5 w-5 mr-1" />
-                  {userInfo.name}
-                </span>
-                <ul className="absolute right-0 mt-2 w-48 bg-white text-gray-800 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-hover:visible transition-opacity duration-200 invisible z-10">
-                  <li>
-                    <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100">
-                      Profile
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/myorders" className="block px-4 py-2 hover:bg-gray-100 flex items-center">
-                      <ListOrdered className="h-4 w-4 mr-2" />
-                      My Orders
-                    </Link>
-                  </li>
-                  {userInfo.isAdmin && (
-                    <li>
-                      <Link to="/admin" className="block px-4 py-2 hover:bg-gray-100">
-                        Admin Panel
-                      </Link>
-                    </li>
-                  )}
-                  <li>
-                    <button onClick={logoutHandler} className="block w-full text-right px-4 py-2 hover:bg-gray-100">
-                      Logout
-                    </button>
-                  </li>
-                </ul>
-              </li>
-            ) : (
-              <li>
-                <Link to="/login" className="flex items-center hover:text-gray-300">
-                  <User className="h-5 w-5 mr-1" />
-                  Sign In
-                </Link>
-              </li>
-            )}
-          </ul>
-        </nav>
+    <>
+      <div className="announcement-bar" dir={ar ? "rtl" : "ltr"}>
+        {ar
+          ? "اختيارات منتقاة بعناية · تجربة تسوق استثنائية"
+          : "THOUGHTFULLY SELECTED · A MORE CONSIDERED WAY TO SHOP"}
       </div>
-    </header>
+
+      <header className="premium-navbar" dir={ar ? "rtl" : "ltr"}>
+        <div className="nav-inner">
+
+          <button
+            type="button"
+            className="mobile-menu-button"
+            onClick={() => {
+              setMenuOpen((prev) => !prev)
+              setAccountOpen(false)
+            }}
+            aria-label={
+              menuOpen
+                ? ar
+                  ? "إغلاق القائمة"
+                  : "Close navigation menu"
+                : ar
+                  ? "فتح القائمة"
+                  : "Open navigation menu"
+            }
+            aria-expanded={menuOpen}
+            aria-controls="main-navigation"
+          >
+            {menuOpen ? (
+              <X size={23} strokeWidth={1.5} />
+            ) : (
+              <Menu size={23} strokeWidth={1.5} />
+            )}
+          </button>
+
+          <nav
+            id="main-navigation"
+            className={`main-nav ${menuOpen ? "is-open" : ""}`}
+            aria-label={ar ? "القائمة الرئيسية" : "Main navigation"}
+          >
+            {navLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                onClick={closeMenus}
+                className={
+                  location.pathname === link.path
+                    ? "active-nav-link"
+                    : ""
+                }
+                aria-current={
+                  location.pathname === link.path ? "page" : undefined
+                }
+              >
+                {link.name}
+              </Link>
+            ))}
+          </nav>
+
+          <Link
+            to="/"
+            className="brand-mark"
+            aria-label="PROSHOP home"
+            onClick={closeMenus}
+          >
+            <span>PRO</span>SHOP
+            <small>CURATED GOODS</small>
+          </Link>
+
+          <div className="nav-actions">
+
+            <button
+              type="button"
+              className="language-button"
+              onClick={toggleLanguage}
+              aria-label={
+                ar ? "Switch to English" : "التبديل إلى العربية"
+              }
+              title={ar ? "English" : "العربية"}
+            >
+              <Globe2 size={17} strokeWidth={1.6} />
+              <span>{ar ? "EN" : "عربي"}</span>
+            </button>
+
+            {userInfo ? (
+              <div
+                className={`account-menu ${
+                  accountOpen ? "account-open" : ""
+                }`}
+              >
+                <button
+                  type="button"
+                  className="icon-button account-trigger"
+                  onClick={() => {
+                    setAccountOpen((prev) => !prev)
+                    setMenuOpen(false)
+                  }}
+                  aria-label={ar ? "حسابي" : "My account"}
+                  aria-expanded={accountOpen}
+                  aria-haspopup="true"
+                >
+                  <UserRound size={20} strokeWidth={1.6} />
+                  <ChevronDown size={12} strokeWidth={1.8} />
+                </button>
+
+                <div
+                  className="account-dropdown"
+                  aria-hidden={!accountOpen}
+                >
+                  <div className="account-dropdown-header">
+                    <span>{ar ? "مرحبًا بك" : "Welcome"}</span>
+                    <strong>{userInfo.name}</strong>
+                  </div>
+
+                  <Link to="/profile" onClick={closeMenus}>
+                    <UserRound size={15} />
+                    {ar ? "حسابي الشخصي" : "My Profile"}
+                  </Link>
+
+                  <Link to="/myorders" onClick={closeMenus}>
+                    <ClipboardList size={15} />
+                    {ar ? "طلباتي" : "My Orders"}
+                  </Link>
+
+                  {userInfo.isAdmin && (
+                    <Link to="/admin" onClick={closeMenus}>
+                      <ShieldCheck size={15} />
+                      {ar ? "لوحة الإدارة" : "Admin Dashboard"}
+                    </Link>
+                  )}
+
+                  <div className="account-dropdown-divider" />
+
+                  <button type="button" onClick={logoutHandler}>
+                    <LogOut size={15} />
+                    {ar ? "تسجيل الخروج" : "Logout"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="icon-button"
+                aria-label={ar ? "تسجيل الدخول" : "Sign in"}
+                title={ar ? "تسجيل الدخول" : "Sign in"}
+                onClick={closeMenus}
+              >
+                <UserRound size={20} strokeWidth={1.6} />
+              </Link>
+            )}
+
+            <Link
+              to="/cart"
+              className="icon-button cart-action"
+              aria-label={
+                ar
+                  ? `سلة التسوق، ${count} منتجات`
+                  : `Shopping cart, ${count} items`
+              }
+              title={ar ? "سلة التسوق" : "Shopping cart"}
+              onClick={closeMenus}
+            >
+              <ShoppingBag size={20} strokeWidth={1.6} />
+
+              {count > 0 && (
+                <span className="cart-count">
+                  {count > 99 ? "99+" : count}
+                </span>
+              )}
+            </Link>
+
+          </div>
+        </div>
+      </header>
+    </>
   )
 }
 

@@ -1,49 +1,165 @@
-"use client"
-
 import { useContext, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import {
+  MapPin,
+  CreditCard,
+  Package,
+  ShieldCheck,
+  ArrowRight,
+  ArrowLeft,
+} from "lucide-react"
+
 import { CartContext } from "../context/CartContext"
 import { AuthContext } from "../context/AuthContext"
-import axios from "../api/axios"
+import { LanguageContext } from "../context/LanguageContext"
+import axios, { BASE_BACKEND_URL } from "../api/axios"
 import { useNotification } from "../context/NotificationContext"
 
+const getImageUrl = (image) => {
+  if (!image) return "/placeholder.svg"
+
+  if (
+    image.startsWith("http://") ||
+    image.startsWith("https://") ||
+    image.startsWith("data:") ||
+    image.startsWith("blob:")
+  ) {
+    return image
+  }
+
+  return `${BASE_BACKEND_URL}/${image.replace(/^\/+/, "")}`
+}
+
 function PlaceOrderPage() {
-  const { cartItems, itemsPrice, shippingPrice, taxPrice, totalPrice, clearCart } = useContext(CartContext)
+  const {
+    cartItems,
+    itemsPrice,
+    shippingPrice,
+    taxPrice,
+    totalPrice,
+  } = useContext(CartContext)
+
   const { userInfo } = useContext(AuthContext)
+  const { language } = useContext(LanguageContext)
+
   const navigate = useNavigate()
   const { addNotification } = useNotification()
+
+  const isArabic = language === "ar"
 
   const [shippingAddress, setShippingAddress] = useState(null)
   const [paymentMethod, setPaymentMethod] = useState(null)
   const [loading, setLoading] = useState(false)
 
+  const t = {
+    finalStep: isArabic ? "الخطوة الأخيرة" : "Final Step",
+    title: isArabic ? "مراجعة طلبك" : "Review Your Order",
+    description: isArabic
+      ? "راجع تفاصيل طلبك قبل إتمام عملية الشراء"
+      : "Check your order details before completing your purchase",
+    shippingAddress: isArabic ? "عنوان الشحن" : "Shipping Address",
+    editAddress: isArabic ? "تعديل العنوان" : "Edit address",
+    addressNotSet: isArabic
+      ? "لم يتم تحديد عنوان الشحن."
+      : "Shipping address not set.",
+    addAddress: isArabic
+      ? "إضافة عنوان الشحن"
+      : "Add shipping address",
+    paymentMethod: isArabic ? "طريقة الدفع" : "Payment Method",
+    paypalCard: isArabic
+      ? "باي بال أو بطاقة ائتمان"
+      : "PayPal or Credit Card",
+    paymentNotSet: isArabic
+      ? "لم يتم تحديد طريقة الدفع."
+      : "Payment method not set.",
+    choosePayment: isArabic
+      ? "اختر طريقة الدفع"
+      : "Choose payment method",
+    orderItems: isArabic ? "منتجات الطلب" : "Order Items",
+    quantity: isArabic ? "الكمية" : "Quantity",
+    each: isArabic ? "للقطعة" : "each",
+    emptyCart: isArabic ? "سلة التسوق فارغة." : "Your cart is empty.",
+    startShopping: isArabic ? "ابدأ التسوق" : "Start Shopping",
+    summary: isArabic ? "ملخص الطلب" : "Order Summary",
+    items: isArabic ? "المنتجات" : "Items",
+    shipping: isArabic ? "الشحن" : "Shipping",
+    tax: isArabic ? "الضريبة" : "Tax",
+    total: isArabic ? "الإجمالي" : "Total",
+    processing: isArabic ? "جارٍ إنشاء الطلب..." : "Processing...",
+    placeOrder: isArabic ? "تأكيد الطلب" : "Place Order",
+    secureCheckout: isArabic
+      ? "دفع آمن باستخدام PayPal"
+      : "Secure checkout with PayPal",
+    invalidCheckout: isArabic
+      ? "بيانات إتمام الطلب غير صالحة. حاول مرة أخرى."
+      : "Invalid checkout information. Please try again.",
+    orderIdError: isArabic
+      ? "تم إنشاء الطلب ولكن لم يتم استلام رقم الطلب."
+      : "Order was created but no order ID was returned.",
+    createOrderError: isArabic
+      ? "تعذر إنشاء الطلب."
+      : "Could not create order",
+    product: isArabic ? "منتج" : "Product",
+  }
+
   useEffect(() => {
     if (!userInfo) {
-      navigate("/login?redirect=/placeorder")
+      navigate("/login?redirect=/placeorder", { replace: true })
+      return
     }
+
     if (cartItems.length === 0) {
-      navigate("/cart")
+      navigate("/cart", { replace: true })
+      return
     }
 
-    const storedShippingAddress = localStorage.getItem("shippingAddress")
-    const storedPaymentMethod = localStorage.getItem("paymentMethod")
+    try {
+      const storedShippingAddress = JSON.parse(
+        localStorage.getItem("shippingAddress") || "null"
+      )
 
-    if (!storedShippingAddress) {
-      navigate("/shipping")
-    } else {
-      setShippingAddress(JSON.parse(storedShippingAddress))
-    }
+      const storedPaymentMethod = JSON.parse(
+        localStorage.getItem("paymentMethod") || "null"
+      )
 
-    if (!storedPaymentMethod) {
-      navigate("/payment")
-    } else {
-      setPaymentMethod(JSON.parse(storedPaymentMethod))
+      if (
+        !storedShippingAddress ||
+        !storedShippingAddress.address?.trim() ||
+        !storedShippingAddress.city?.trim() ||
+        !storedShippingAddress.postalCode?.trim() ||
+        !storedShippingAddress.country?.trim()
+      ) {
+        navigate("/shipping", { replace: true })
+        return
+      }
+
+      if (storedPaymentMethod !== "PayPal") {
+        navigate("/payment", { replace: true })
+        return
+      }
+
+      setShippingAddress(storedShippingAddress)
+      setPaymentMethod(storedPaymentMethod)
+    } catch {
+      addNotification(t.invalidCheckout, "error")
+      navigate("/shipping", { replace: true })
     }
-  }, [userInfo, cartItems, navigate])
+  }, [userInfo, cartItems.length, navigate, addNotification])
 
   const placeOrderHandler = async () => {
+    if (
+      loading ||
+      !userInfo ||
+      cartItems.length === 0 ||
+      !shippingAddress ||
+      paymentMethod !== "PayPal"
+    ) {
+      return
+    }
+
     try {
       setLoading(true)
+
       const config = {
         headers: {
           "Content-Type": "application/json",
@@ -62,122 +178,266 @@ function PlaceOrderPage() {
           shippingPrice,
           totalPrice,
         },
-        config,
+        config
       )
 
-      setLoading(false)
-      clearCart() // Clear cart after successful order
-      localStorage.removeItem("shippingAddress")
-      localStorage.removeItem("paymentMethod")
-      navigate(`/order/${data._id}`) // Redirect to order details page
+      if (!data?._id) {
+        throw new Error(t.orderIdError)
+      }
+
+      navigate(`/order/${data._id}`)
     } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        t.createOrderError
+
+      addNotification(message, "error")
+    } finally {
       setLoading(false)
-      addNotification(err.response && err.response.data.message ? err.response.data.message : err.message, "error")
     }
   }
 
   return (
-    <div className="py-8">
-      <h1 className="text-4xl font-bold text-center mb-8">Place Order</h1>
-      {loading && (
-        <div className="flex justify-center items-center h-32">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    <main
+      dir={isArabic ? "rtl" : "ltr"}
+      className="min-h-screen bg-[#f8f7f4] px-4 py-10"
+    >
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-10 text-center">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-[#918875]">
+            {t.finalStep}
+          </p>
+
+          <h1 className="font-serif text-3xl font-semibold text-[#292720] sm:text-4xl">
+            {t.title}
+          </h1>
+
+          <p className="mt-3 text-sm text-[#77736b]">
+            {t.description}
+          </p>
         </div>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-bold mb-4">Shipping</h2>
-          {shippingAddress ? (
-            <p className="text-gray-700 mb-4">
-              <strong>Address:</strong> {shippingAddress.address}, {shippingAddress.city}, {shippingAddress.postalCode},{" "}
-              {shippingAddress.country}
-            </p>
-          ) : (
-            <p className="text-red-500">
-              Shipping address not set.{" "}
-              <Link to="/shipping" className="text-blue-600 hover:underline">
-                Add shipping address
-              </Link>
-            </p>
-          )}
 
-          <h2 className="text-2xl font-bold mb-4 mt-6">Payment Method</h2>
-          {paymentMethod ? (
-            <p className="text-gray-700 mb-4">
-              <strong>Method:</strong> {paymentMethod}
-            </p>
-          ) : (
-            <p className="text-red-500">
-              Payment method not set.{" "}
-              <Link to="/payment" className="text-blue-600 hover:underline">
-                Choose payment method
-              </Link>
-            </p>
-          )}
+        <div className="grid grid-cols-1 items-start gap-7 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            {/* Shipping Address */}
+            <section className="rounded-2xl border border-[#e9e5dd] bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-5 flex items-center gap-3 border-b border-[#eeeae3] pb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f2ec] text-[#514b40]">
+                  <MapPin size={19} />
+                </div>
 
-          <h2 className="text-2xl font-bold mb-4 mt-6">Order Items</h2>
-          {cartItems.length === 0 ? (
-            <p className="text-red-500">
-              Your cart is empty.{" "}
-              <Link to="/products" className="text-blue-600 hover:underline">
-                Start Shopping
-              </Link>
-            </p>
-          ) : (
-            <div>
-              {cartItems.map((item) => (
-                <div key={item._id} className="flex items-center border-b border-gray-200 py-3 last:border-b-0">
-                  <div className="w-16 h-16 mr-4 flex-shrink-0">
-                    <img
-                      src={item.image || "/placeholder.svg"}
-                      alt={item.name}
-                      className="w-full h-full object-cover rounded-md"
-                    />
-                  </div>
-                  <div className="flex-grow">
-                    <Link to={`/product/${item._id}`} className="text-lg font-semibold text-gray-800 hover:underline">
-                      {item.name}
-                    </Link>
-                    <p className="text-gray-600">
-                      {item.qty} x ${item.price.toFixed(2)} = ${(item.qty * item.price).toFixed(2)}
+                <h2 className="font-semibold text-[#292720]">
+                  {t.shippingAddress}
+                </h2>
+              </div>
+
+              {shippingAddress ? (
+                <div className="text-sm leading-7 text-[#625c51]">
+                  <p>{shippingAddress.address}</p>
+
+                  <p>
+                    {shippingAddress.city},{" "}
+                    {shippingAddress.postalCode}
+                  </p>
+
+                  <p>{shippingAddress.country}</p>
+
+                  <Link
+                    to="/shipping"
+                    className="mt-3 inline-block text-xs font-semibold text-[#77705f] underline underline-offset-4 hover:text-[#292720]"
+                  >
+                    {t.editAddress}
+                  </Link>
+                </div>
+              ) : (
+                <p className="text-sm text-red-600">
+                  {t.addressNotSet}{" "}
+                  <Link to="/shipping" className="underline">
+                    {t.addAddress}
+                  </Link>
+                </p>
+              )}
+            </section>
+
+            {/* Payment Method */}
+            <section className="rounded-2xl border border-[#e9e5dd] bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-5 flex items-center gap-3 border-b border-[#eeeae3] pb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f2ec] text-[#514b40]">
+                  <CreditCard size={19} />
+                </div>
+
+                <h2 className="font-semibold text-[#292720]">
+                  {t.paymentMethod}
+                </h2>
+              </div>
+
+              {paymentMethod ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-[#292720]" dir="ltr">
+                      PayPal
+                    </p>
+
+                    <p className="mt-1 text-xs text-[#918b80]">
+                      {t.paypalCard}
                     </p>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        <div className="md:col-span-1 bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-bold mb-4">Order Summary</h2>
-          <div className="border-b border-gray-200 pb-4 mb-4">
-            <p className="flex justify-between text-lg mb-2">
-              <span>Items</span>
-              <span>${itemsPrice.toFixed(2)}</span>
-            </p>
-            <p className="flex justify-between text-lg mb-2">
-              <span>Shipping</span>
-              <span>${shippingPrice.toFixed(2)}</span>
-            </p>
-            <p className="flex justify-between text-lg mb-2">
-              <span>Tax</span>
-              <span>${taxPrice.toFixed(2)}</span>
-            </p>
+                  <span
+                    dir="ltr"
+                    className="rounded-md bg-[#f5f2ec] px-4 py-2 text-sm font-bold text-[#2455a4]"
+                  >
+                    PayPal
+                  </span>
+                </div>
+              ) : (
+                <p className="text-sm text-red-600">
+                  {t.paymentNotSet}{" "}
+                  <Link to="/payment" className="underline">
+                    {t.choosePayment}
+                  </Link>
+                </p>
+              )}
+            </section>
+
+            {/* Order Items */}
+            <section className="rounded-2xl border border-[#e9e5dd] bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-5 flex items-center gap-3 border-b border-[#eeeae3] pb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f2ec] text-[#514b40]">
+                  <Package size={19} />
+                </div>
+
+                <h2 className="font-semibold text-[#292720]">
+                  {t.orderItems} ({cartItems.length})
+                </h2>
+              </div>
+
+              {cartItems.length === 0 ? (
+                <p className="text-sm text-[#77736b]">
+                  {t.emptyCart}{" "}
+                  <Link
+                    to="/products"
+                    className="font-semibold underline"
+                  >
+                    {t.startShopping}
+                  </Link>
+                </p>
+              ) : (
+                <div className="divide-y divide-[#eeeae3]">
+                  {cartItems.map((item) => {
+                    const productName =
+                      isArabic && item.nameAr?.trim()
+                        ? item.nameAr
+                        : item.name || t.product
+
+                    return (
+                      <div
+                        key={item._id}
+                        className="flex items-center gap-4 py-4 first:pt-0 last:pb-0"
+                      >
+                        <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-[#f7f6f3] sm:h-24 sm:w-24">
+                          <img
+                            src={getImageUrl(item.image)}
+                            alt={productName}
+                            onError={(event) => {
+                              event.currentTarget.onerror = null
+                              event.currentTarget.src = "/placeholder.svg"
+                            }}
+                            className="h-full w-full object-contain"
+                          />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            to={`/product/${item._id}`}
+                            className="font-semibold text-[#292720] hover:underline"
+                          >
+                            {productName}
+                          </Link>
+
+                          <p className="mt-1 text-sm text-[#77736b]">
+                            {t.quantity}: {item.qty}
+                          </p>
+
+                          <p className="mt-1 text-xs text-[#918b80]">
+                            ${Number(item.price).toFixed(2)} {t.each}
+                          </p>
+                        </div>
+
+                        <p
+                          dir="ltr"
+                          className="whitespace-nowrap text-sm font-semibold text-[#292720]"
+                        >
+                          $
+                          {(
+                            Number(item.qty) * Number(item.price)
+                          ).toFixed(2)}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
           </div>
-          <p className="flex justify-between text-2xl font-bold mb-6">
-            <span>Total</span>
-            <span>${totalPrice.toFixed(2)}</span>
-          </p>
-          <button
-            onClick={placeOrderHandler}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 w-full"
-            disabled={cartItems.length === 0 || !shippingAddress || !paymentMethod || loading}
-          >
-            Place Order
-          </button>
+
+          {/* Order Summary */}
+          <aside className="rounded-2xl border border-[#e9e5dd] bg-white p-6 shadow-sm lg:sticky lg:top-6">
+            <h2 className="mb-6 font-serif text-2xl font-semibold text-[#292720]">
+              {t.summary}
+            </h2>
+
+            <div className="space-y-4 border-b border-[#eeeae3] pb-5">
+              <div className="flex justify-between gap-3 text-sm text-[#625c51]">
+                <span>{t.items}</span>
+                <span dir="ltr">${itemsPrice.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between gap-3 text-sm text-[#625c51]">
+                <span>{t.shipping}</span>
+                <span dir="ltr">${shippingPrice.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between gap-3 text-sm text-[#625c51]">
+                <span>{t.tax}</span>
+                <span dir="ltr">${taxPrice.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between gap-3 py-5 text-lg font-bold text-[#292720]">
+              <span>{t.total}</span>
+              <span dir="ltr">${totalPrice.toFixed(2)}</span>
+            </div>
+
+            <button
+              onClick={placeOrderHandler}
+              disabled={
+                cartItems.length === 0 ||
+                !shippingAddress ||
+                paymentMethod !== "PayPal" ||
+                loading
+              }
+              className="flex w-full items-center justify-center gap-3 rounded-lg bg-[#292720] px-5 py-4 text-sm font-semibold text-white transition hover:bg-[#494438] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? t.processing : t.placeOrder}
+
+              {!loading &&
+                (isArabic ? (
+                  <ArrowLeft size={18} />
+                ) : (
+                  <ArrowRight size={18} />
+                ))}
+            </button>
+
+            <div className="mt-5 flex items-center justify-center gap-2 text-xs text-[#918b80]">
+              <ShieldCheck size={16} />
+              <span>{t.secureCheckout}</span>
+            </div>
+          </aside>
         </div>
       </div>
-    </div>
+    </main>
   )
 }
 

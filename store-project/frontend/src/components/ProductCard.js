@@ -1,30 +1,76 @@
+import { useContext } from "react"
 import { Link } from "react-router-dom"
-import { BASE_BACKEND_URL } from "../api/axios" // New: Import BASE_BACKEND_URL
+import { BASE_BACKEND_URL } from "../api/axios"
+import { LanguageContext } from "../context/LanguageContext"
+import { Star, ArrowUpRight } from "lucide-react"
 
 function ProductCard({ product }) {
-  // New: Construct full image path
-  const imageUrl = product.image.startsWith("/uploads")
+  const { language } = useContext(LanguageContext)
+  const isArabic = language === "ar"
+
+  const productName =
+    isArabic && product.nameAr?.trim()
+      ? product.nameAr
+      : product.name
+
+  const imageUrl = product.image?.startsWith("/uploads")
     ? `${BASE_BACKEND_URL}${product.image}`
     : product.image || "/placeholder.svg"
 
+  const rating = Number(product.rating || 0)
+
+  const handleImageError = (e) => {
+    e.currentTarget.onerror = null
+    e.currentTarget.src = "/placeholder.svg"
+  }
+
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
-      <Link to={`/product/${product._id}`}>
-        <img src={imageUrl || "/placeholder.svg"} alt={product.name} className="w-full h-48 object-cover" />
+    <article className="premium-product-card">
+      <Link
+        to={`/product/${product._id}`}
+        className="product-image-wrap"
+      >
+        <img
+          src={imageUrl}
+          alt={productName}
+          loading="lazy"
+          onError={handleImageError}
+        />
+
+        <span className="product-quick-view">
+          <ArrowUpRight size={18} />
+        </span>
       </Link>
-      <div className="p-4">
-        <Link to={`/product/${product._id}`}>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2 truncate">{product.name}</h3>
+
+      <div className="product-card-info">
+        <div className="product-card-topline">
+          <span>{product.brand || (isArabic ? "مختار لك" : "SELECTED FOR YOU")}</span>
+
+          <span className="product-rating">
+            <Star size={12} fill="currentColor" />
+            {rating.toFixed(1)}
+          </span>
+        </div>
+
+        <Link
+          to={`/product/${product._id}`}
+          className="product-card-name"
+          dir={isArabic ? "rtl" : "ltr"}
+        >
+          {productName}
         </Link>
-        <p className="text-gray-600 text-sm mb-2">{product.brand}</p>
-        <div className="flex justify-between items-center">
-          <span className="text-xl font-bold text-blue-600">${product.price.toFixed(2)}</span>
-          <span className="text-sm text-gray-500">
-            {product.rating} Stars ({product.numReviews} Reviews)
+
+        <div className="product-card-bottom">
+          <strong>
+            ${Number(product.price || 0).toFixed(2)}
+          </strong>
+
+          <span>
+            {product.numReviews || 0} {isArabic ? "تقييم" : "reviews"}
           </span>
         </div>
       </div>
-    </div>
+    </article>
   )
 }
 
