@@ -7,6 +7,8 @@ import {
   Mail,
   LockKeyhole,
   ShieldCheck,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 import { AuthContext } from "../context/AuthContext"
@@ -19,6 +21,8 @@ function RegisterPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const { login } = useContext(AuthContext)
@@ -73,6 +77,8 @@ function RegisterPage() {
     error: isArabic
       ? "تعذر إنشاء حسابك. حاول مرة أخرى."
       : "Unable to create your account. Please try again.",
+    showPassword: isArabic ? "إظهار كلمة المرور" : "Show password",
+    hidePassword: isArabic ? "إخفاء كلمة المرور" : "Hide password",
   }
 
   const submitHandler = async (e) => {
@@ -114,6 +120,7 @@ function RegisterPage() {
   }
 
   const iconPosition = isArabic ? "right-4" : "left-4"
+  const eyePosition = isArabic ? "left-4" : "right-4"
   const inputPadding = isArabic ? "pr-11 pl-4" : "pl-11 pr-4"
 
   return (
@@ -215,11 +222,11 @@ function RegisterPage() {
               />
 
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 id="password"
                 autoComplete="new-password"
                 dir="ltr"
-                className={`w-full border border-[#e5e1da] rounded-lg py-3 ${inputPadding} text-sm text-[#25231f] outline-none focus:border-[#927b5b] transition-colors text-left`}
+                className="w-full border border-[#e5e1da] rounded-lg py-3 px-11 text-sm text-[#25231f] outline-none focus:border-[#927b5b] transition-colors text-left"
                 placeholder={t.passwordPlaceholder}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -227,6 +234,20 @@ function RegisterPage() {
                 required
                 disabled={loading}
               />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={loading}
+                aria-label={showPassword ? t.hidePassword : t.showPassword}
+                className={`absolute ${eyePosition} top-1/2 -translate-y-1/2 text-[#99938a] hover:text-[#927b5b] transition-colors`}
+              >
+                {showPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
             </div>
           </div>
 
@@ -245,17 +266,33 @@ function RegisterPage() {
               />
 
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 id="confirmPassword"
                 autoComplete="new-password"
                 dir="ltr"
-                className={`w-full border border-[#e5e1da] rounded-lg py-3 ${inputPadding} text-sm text-[#25231f] outline-none focus:border-[#927b5b] transition-colors text-left`}
+                className="w-full border border-[#e5e1da] rounded-lg py-3 px-11 text-sm text-[#25231f] outline-none focus:border-[#927b5b] transition-colors text-left"
                 placeholder={t.confirmPlaceholder}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 disabled={loading}
               />
+
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                disabled={loading}
+                aria-label={
+                  showConfirmPassword ? t.hidePassword : t.showPassword
+                }
+                className={`absolute ${eyePosition} top-1/2 -translate-y-1/2 text-[#99938a] hover:text-[#927b5b] transition-colors`}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
             </div>
           </div>
 

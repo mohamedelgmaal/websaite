@@ -6,6 +6,8 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 import { AuthContext } from "../context/AuthContext"
@@ -16,6 +18,7 @@ import { useNotification } from "../context/NotificationContext"
 function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const { login } = useContext(AuthContext)
@@ -58,6 +61,8 @@ function LoginPage() {
     loginError: isArabic
       ? "تعذر تسجيل الدخول. تحقق من بياناتك وحاول مرة أخرى."
       : "Unable to sign in. Please check your details and try again.",
+    showPassword: isArabic ? "إظهار كلمة المرور" : "Show password",
+    hidePassword: isArabic ? "إخفاء كلمة المرور" : "Hide password",
   }
 
   const submitHandler = async (e) => {
@@ -88,7 +93,8 @@ function LoginPage() {
   }
 
   const iconPosition = isArabic ? "right-4" : "left-4"
-  const inputPadding = isArabic ? "pr-11 pl-4" : "pl-11 pr-4"
+  const eyePosition = isArabic ? "left-4" : "right-4"
+  const inputPadding = isArabic ? "pr-11 pl-11" : "pl-11 pr-11"
 
   return (
     <main
@@ -160,7 +166,7 @@ function LoginPage() {
               />
 
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 id="password"
                 autoComplete="current-password"
                 dir="ltr"
@@ -171,6 +177,20 @@ function LoginPage() {
                 required
                 disabled={loading}
               />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={loading}
+                aria-label={showPassword ? t.hidePassword : t.showPassword}
+                className={`absolute ${eyePosition} top-1/2 -translate-y-1/2 text-[#99938a] hover:text-[#927b5b] transition-colors`}
+              >
+                {showPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
             </div>
 
             <div className={`mt-3 ${isArabic ? "text-left" : "text-right"}`}>
