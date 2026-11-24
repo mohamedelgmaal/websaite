@@ -7,6 +7,8 @@ import {
   ArrowRight,
   ArrowLeft,
   LoaderCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 import { AuthContext } from "../context/AuthContext"
@@ -26,6 +28,9 @@ function ProfilePage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [updateLoading, setUpdateLoading] = useState(false)
@@ -96,6 +101,8 @@ function ProfilePage() {
     unableToUpdate: isArabic
       ? "تعذر تحديث الملف الشخصي."
       : "Unable to update your profile.",
+    showPassword: isArabic ? "إظهار كلمة المرور" : "Show password",
+    hidePassword: isArabic ? "إخفاء كلمة المرور" : "Hide password",
   }
 
   useEffect(() => {
@@ -146,7 +153,12 @@ function ProfilePage() {
     return () => {
       cancelled = true
     }
-  }, [userInfo?.token, addNotification])
+  }, [
+    userInfo?.token,
+    addNotification,
+    t.loginRequired,
+    t.unableToLoad,
+  ])
 
   const submitHandler = async (e) => {
     e.preventDefault()
@@ -212,6 +224,10 @@ function ProfilePage() {
   const iconPosition = isArabic
     ? "right-4"
     : "left-4"
+
+  const eyePosition = isArabic
+    ? "left-4"
+    : "right-4"
 
   const inputPadding = isArabic
     ? "pr-12"
@@ -375,14 +391,29 @@ function ProfilePage() {
 
                     <input
                       id="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       autoComplete="new-password"
                       dir="ltr"
-                      className={`${inputClass} ${inputPadding} text-left`}
+                      className={`${inputClass} ${isArabic ? "pr-12 pl-12" : "pl-12 pr-12"} text-left`}
                       placeholder={t.enterPassword}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={
+                        showPassword ? t.hidePassword : t.showPassword
+                      }
+                      className={`absolute ${eyePosition} top-1/2 -translate-y-1/2 text-stone-400 transition-colors hover:text-stone-700`}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -401,14 +432,31 @@ function ProfilePage() {
 
                     <input
                       id="confirmPassword"
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       autoComplete="new-password"
                       dir="ltr"
-                      className={`${inputClass} ${inputPadding} text-left`}
+                      className={`${inputClass} ${isArabic ? "pr-12 pl-12" : "pl-12 pr-12"} text-left`}
                       placeholder={t.confirmPasswordPlaceholder}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                     />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      aria-label={
+                        showConfirmPassword ? t.hidePassword : t.showPassword
+                      }
+                      className={`absolute ${eyePosition} top-1/2 -translate-y-1/2 text-stone-400 transition-colors hover:text-stone-700`}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
